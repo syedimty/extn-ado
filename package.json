@@ -109,7 +109,9 @@
         },
         {
           "command": "workitems-manager.deleteItem",
-          "when": "view == workitems && viewItem =~ /(epic|feature|story)/",
+          "title": "Delete",
+          "icon": "$(trash)",
+          "when": "view == workitems && viewItem =~ /(epic|feature|story|solution-intent)/",
           "group": "inline@2"
         }
       ]

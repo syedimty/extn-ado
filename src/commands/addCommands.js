@@ -76,7 +76,7 @@ function registerAddCommands(context, workitemsProvider) {
             }
 
             // Serialize the item safely to avoid circular references
-            console.log('Deleting item:', JSON.stringify(item.toJSON()));
+            console.log('Deleting item:', item);
 
             if (item.type === 'epic') {
                 const index = workitemsData.indexOf(item);
@@ -122,7 +122,7 @@ function registerAddCommands(context, workitemsProvider) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('workitems-manager.editFeature', async (id) => {
-            const item = workitemsData.find(workitem => workitem.id === id);
+            const item = findWorkitemById(id, workitemsData);
             if (!item) {
                 vscode.window.showErrorMessage(`Feature with ID ${id} not found.`);
                 return;
@@ -144,7 +144,7 @@ function registerAddCommands(context, workitemsProvider) {
 
     context.subscriptions.push(
         vscode.commands.registerCommand('workitems-manager.editStory', async (id) => {
-            const item = workitemsData.find(workitem => workitem.id === id);
+            const item = findWorkitemById(id, workitemsData);
             if (!item) {
                 vscode.window.showErrorMessage(`Story with ID ${id} not found.`);
                 return;

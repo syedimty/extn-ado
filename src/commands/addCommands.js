@@ -8,7 +8,7 @@ function registerAddCommands(context, workitemsProvider) {
             const title = await vscode.window.showInputBox({ prompt: 'Enter Epic Title', placeHolder: 'EPIC Title' });
             if (!title) return;
 
-            const newEpic = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.Collapsed, 'epic', []);
+            const newEpic = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.Collapsed, 'epic', Math.floor(Math.random() * 10000), []);
             workitemsData.push(newEpic);
             workitemsProvider.refresh();
         })
@@ -19,7 +19,7 @@ function registerAddCommands(context, workitemsProvider) {
             const title = await vscode.window.showInputBox({ prompt: `Enter Feature Title for ${item.label}` });
             if (!title) return;
 
-            const newFeature = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.Collapsed, 'feature', []);
+            const newFeature = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.Collapsed, 'feature', Math.floor(Math.random() * 10000), []);
             item.children.push(newFeature);
             item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed; // Update collapsible state for epic
             workitemsProvider.refresh();
@@ -43,7 +43,7 @@ function registerAddCommands(context, workitemsProvider) {
             const title = await vscode.window.showInputBox({ prompt: `Enter Story Title for ${item.label}` });
             if (!title) return;
 
-            const newStory = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.None, 'story', []);
+            const newStory = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.None, 'story', Math.floor(Math.random() * 10000), []);
             item.children.push(newStory);
             workitemsProvider.refresh();
         })
@@ -99,7 +99,13 @@ function registerAddCommands(context, workitemsProvider) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('workitems-manager.editEpic', async (item) => {
+        vscode.commands.registerCommand('workitems-manager.editEpic', async (id) => {
+            const item = workitemsData.find(workitem => workitem.id === id);
+            if (!item) {
+                vscode.window.showErrorMessage(`Epic with ID ${id} not found.`);
+                return;
+            }
+
             const newTitle = await vscode.window.showInputBox({
                 prompt: `Edit title for Epic: ${item.label}`,
                 value: item.label,
@@ -115,7 +121,13 @@ function registerAddCommands(context, workitemsProvider) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('workitems-manager.editFeature', async (item) => {
+        vscode.commands.registerCommand('workitems-manager.editFeature', async (id) => {
+            const item = workitemsData.find(workitem => workitem.id === id);
+            if (!item) {
+                vscode.window.showErrorMessage(`Feature with ID ${id} not found.`);
+                return;
+            }
+
             const newTitle = await vscode.window.showInputBox({
                 prompt: `Edit title for Feature: ${item.label}`,
                 value: item.label,
@@ -131,7 +143,13 @@ function registerAddCommands(context, workitemsProvider) {
     );
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('workitems-manager.editStory', async (item) => {
+        vscode.commands.registerCommand('workitems-manager.editStory', async (id) => {
+            const item = workitemsData.find(workitem => workitem.id === id);
+            if (!item) {
+                vscode.window.showErrorMessage(`Story with ID ${id} not found.`);
+                return;
+            }
+
             const newTitle = await vscode.window.showInputBox({
                 prompt: `Edit title for Story: ${item.label}`,
                 value: item.label,
@@ -170,6 +188,70 @@ function registerAddCommands(context, workitemsProvider) {
             item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed; // Update collapsible state
             workitemsProvider.refresh();
             vscode.window.showInformationMessage('5 random stories generated successfully.');
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('workitems-manager.addFeatureOrSolutionIntent', async (item) => {
+            const choice = await vscode.window.showQuickPick([
+                { label: 'Feature', description: 'Add a Feature under this Epic' },
+                { label: 'Solution Intent', description: 'Add a Solution Intent under this Epic' }
+            ], {
+                placeHolder: 'Select the type of item to add'
+            });
+
+            if (!choice) return;
+
+            const title = await vscode.window.showInputBox({ prompt: `Enter ${choice.label} Title for ${item.label}` });
+            if (!title) return;
+
+            const newItem = new WorkitemTreeItem(
+                title,
+                choice.label === 'Feature' ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+                choice.label.toLowerCase().replace(' ', '-'),
+                []
+            );
+
+            item.children.push(newItem);
+            item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed;
+            workitemsProvider.refresh();
+        })
+    );
+
+    function findWorkitemById(id, items) {
+        for (const item of items) {
+            if (item.id === id) {
+                return item;
+            }
+            if (item.children && item.children.length > 0) {
+                const found = findWorkitemById(id, item.children);
+                if (found) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('workitems-manager.editSolutionIntent', async (id) => {
+            const item = findWorkitemById(id, workitemsData);
+            if (!item) {
+                vscode.window.showErrorMessage(`Solution Intent with ID ${id} not found.`);
+                return;
+            }
+
+            const newTitle = await vscode.window.showInputBox({
+                prompt: `Edit title for Solution Intent: ${item.label}`,
+                value: item.label,
+            });
+
+            if (!newTitle) return;
+
+            item.label = newTitle;
+            workitemsProvider.refresh();
+
+            vscode.window.showInformationMessage(`Solution Intent title updated to: ${newTitle}`);
         })
     );
 }

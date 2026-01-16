@@ -4,7 +4,7 @@ const vscode = require('vscode');
 
 const WorkitemsProvider = require('./src/providers/WorkitemsProvider');
 const registerAddCommands = require('./src/commands/addCommands');
-// const workitemsData = require('./src/data/workitemsData');
+const useStore = require('./src/store/stateManager');
 
 // This method is called when your extension is activated
 // Your extension is activated the very first time the command is executed
@@ -12,11 +12,37 @@ const registerAddCommands = require('./src/commands/addCommands');
 /**
  * @param {vscode.ExtensionContext} context
  */
-function activate(context) {
-    const workitemsProvider = new WorkitemsProvider();
-    vscode.window.registerTreeDataProvider('workitems', workitemsProvider);
+async function activate(context) {
+	// --- Persistence: Load store from globalState ---
+	const STORAGE_KEY = 'workitemsStore';
+	const persisted = context.globalState.get(STORAGE_KEY);
+	if (persisted && persisted.dataStructureVersion) {
+		// Run versioning/migration logic
+		const result = useStore.getState().checkAndMigrateVersion(persisted.dataStructureVersion);
+		if (result === 'unchanged' || result === 'migrated') {
+			// Restore data
+			useStore.setState({
+				...persisted,
+			});
+		}
+		// If 'cleared' or 'initialized', store is already reset
+	}
 
-    registerAddCommands(context, workitemsProvider);
+	const workitemsProvider = new WorkitemsProvider();
+	vscode.window.registerTreeDataProvider('workitems', workitemsProvider);
+
+	registerAddCommands(context, workitemsProvider);
+
+	// --- Persistence: Save store to globalState on every mutation ---
+	useStore.subscribe((state) => {
+		// Only persist user data, not methods
+		context.globalState.update(STORAGE_KEY, {
+			itemsById: state.itemsById,
+			parentById: state.parentById,
+			rootIds: state.rootIds,
+			dataStructureVersion: state.dataStructureVersion,
+		});
+	});
 
 	const decorationEmitter = new vscode.EventEmitter();
 	const workitemsDecorationProvider = {
@@ -25,15 +51,30 @@ function activate(context) {
 			if (uri.scheme !== 'workitems') {
 				return;
 			}
-
 			const parts = uri.path.split('/').filter(Boolean);
 			const [type, id] = parts;
-
-			if (type === 'epic' && id === '2') {
+			const state = useStore.getState();
+			const item = state.itemsById[id];
+			if (!item || !item.status) return;
+			if (item.status.isLoading) {
+				return new vscode.FileDecoration(
+					'',
+					'Loading',
+					new vscode.ThemeColor('charts.yellow')
+				);
+			}
+			if (item.status.isError) {
 				return new vscode.FileDecoration(
 					'!',
-					'Error',
+					'Incomplete',
 					new vscode.ThemeColor('problemsWarningIcon.foreground')
+				);
+			}
+			if (item.status.isComplete) {
+				return new vscode.FileDecoration(
+					'',
+					'Complete',
+					new vscode.ThemeColor('charts.green')
 				);
 			}
 		}

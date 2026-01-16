@@ -18,6 +18,31 @@ function activate(context) {
 
     registerAddCommands(context, workitemsProvider);
 
+	const decorationEmitter = new vscode.EventEmitter();
+	const workitemsDecorationProvider = {
+		onDidChangeFileDecorations: decorationEmitter.event,
+		provideFileDecoration: (uri) => {
+			if (uri.scheme !== 'workitems') {
+				return;
+			}
+
+			const parts = uri.path.split('/').filter(Boolean);
+			const [type, id] = parts;
+
+			if (type === 'epic' && id === '2') {
+				return new vscode.FileDecoration(
+					'!',
+					'Error',
+					new vscode.ThemeColor('problemsWarningIcon.foreground')
+				);
+			}
+		}
+	};
+
+	context.subscriptions.push(
+		vscode.window.registerFileDecorationProvider(workitemsDecorationProvider)
+	);
+
 	// Use the console to output diagnostic information (console.log) and errors (console.error)
 	// This line of code will only be executed once when your extension is activated
 	console.log('Congratulations, your extension "workitems-manager" is now active!');

@@ -8,6 +8,7 @@ class WorkitemTreeItem extends vscode.TreeItem {
         this.children = children;
         this.contextValue = type;
         this.id = id;
+        this.resourceUri = vscode.Uri.parse(`workitems:/${type}/${id}`);
 
         this.description = 'Incomplete';
 

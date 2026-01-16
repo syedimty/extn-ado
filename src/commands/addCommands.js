@@ -1,16 +1,32 @@
 const vscode = require('vscode');
 const WorkitemTreeItem = require('../providers/WorkitemTreeItem');
 const workitemsData = require('../data/workitemsData');
+// Import zustand store
+const useStore = require('../store/stateManager');
 
 function registerAddCommands(context, workitemsProvider) {
     context.subscriptions.push(
         vscode.commands.registerCommand('workitems-manager.addEpic', async () => {
-            const title = await vscode.window.showInputBox({ prompt: 'Enter Epic Title', placeHolder: 'EPIC Title' });
-            if (!title) return;
+            const title = 'New Epic';
+            const epicId = Math.floor(Math.random() * 10000);
 
-            const newEpic = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.Collapsed, 'epic', Math.floor(Math.random() * 10000), []);
+            const newEpic = new WorkitemTreeItem(
+                title,
+                vscode.TreeItemCollapsibleState.Collapsed,
+                'epic',
+                epicId,
+                []
+            );
+            newEpic.iconPath = new vscode.ThemeIcon('sync~spin');
+
             workitemsData.push(newEpic);
+            useStore.getState().addEpic({ title, id: epicId });
             workitemsProvider.refresh();
+
+            setTimeout(() => {
+                newEpic.iconPath = new vscode.ThemeIcon('project');
+                workitemsProvider.refresh();
+            }, 2000);
         })
     );
 
@@ -19,32 +35,30 @@ function registerAddCommands(context, workitemsProvider) {
             const title = await vscode.window.showInputBox({ prompt: `Enter Feature Title for ${item.label}` });
             if (!title) return;
 
-            const newFeature = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.Collapsed, 'feature', Math.floor(Math.random() * 10000), []);
-            item.children.push(newFeature);
-            item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed; // Update collapsible state for epic
+            const newFeature = { title, id: Math.floor(Math.random() * 10000), parentId: item.id };
+            useStore.getState().addFeature(newFeature);
             workitemsProvider.refresh();
         })
     );
-    //this will 5 feature with random id as title like EPIC-RANDOMNUMBER
-    context.subscriptions.push(vscode.commands.registerCommand('workitems-manager.generateFeatures', async (item) => {
-        for (let i = 0; i < 5; i++) {
-            const randomId = Math.floor(Math.random() * 10000);
-            const title = `FEATURE-${randomId}`;
-            const uniqueId = `${item.id}-${randomId}-${Date.now()}`; // Ensure unique ID for features
-            const newFeature = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.Collapsed, 'feature', uniqueId, []);
-            item.collapsibleState = vscode.TreeItemCollapsibleState.Collapsed; // Update collapsible state for epic
-            item.children.push(newFeature);
-        }
-        workitemsProvider.refresh();
-    }));
 
     context.subscriptions.push(
-        vscode.commands.registerCommand('workitems-manager.addStory', async (item) => {
-            const title = await vscode.window.showInputBox({ prompt: `Enter Story Title for ${item.label}` });
+        vscode.commands.registerCommand('workitems-manager.addSolutionIntent', async (item) => {
+            const title = await vscode.window.showInputBox({ prompt: `Enter Solution Intent Title for ${item.label}` });
             if (!title) return;
 
-            const newStory = new WorkitemTreeItem(title, vscode.TreeItemCollapsibleState.None, 'story', Math.floor(Math.random() * 10000), []);
-            item.children.push(newStory);
+            const newSolutionIntent = { title, id: Math.floor(Math.random() * 10000), parentId: item.id };
+            useStore.getState().addSolutionIntent(newSolutionIntent);
+            workitemsProvider.refresh();
+        })
+    );
+
+    context.subscriptions.push(
+        vscode.commands.registerCommand('workitems-manager.addUserStory', async (item) => {
+            const title = await vscode.window.showInputBox({ prompt: `Enter User Story Title for ${item.label}` });
+            if (!title) return;
+
+            const newUserStory = { title, id: Math.floor(Math.random() * 10000), parentId: item.id };
+            useStore.getState().addUserStory(newUserStory);
             workitemsProvider.refresh();
         })
     );
@@ -106,17 +120,42 @@ function registerAddCommands(context, workitemsProvider) {
                 return;
             }
 
-            const newTitle = await vscode.window.showInputBox({
-                prompt: `Edit title for Epic: ${item.label}`,
-                value: item.label,
-            });
+            const panel = vscode.window.createWebviewPanel(
+                'editEpic',
+                'Edit Epic',
+                vscode.ViewColumn.One,
+                { enableScripts: true }
+            );
 
-            if (!newTitle) return;
+            const currentTitle = item.fields?.Title || item.label || '';
+            const currentDescription = item.fields?.Description || '';
 
-            item.label = newTitle;
-            workitemsProvider.refresh();
+            panel.webview.html = getEpicWebviewContent(currentTitle, currentDescription);
 
-            vscode.window.showInformationMessage(`Epic title updated to: ${newTitle}`);
+            panel.webview.onDidReceiveMessage(
+                (message) => {
+                    if (message.command === 'save') {
+                        const newTitle = message.title?.trim();
+                        const newDescription = message.description || '';
+
+                        if (!newTitle) {
+                            vscode.window.showErrorMessage('Title is required.');
+                            return;
+                        }
+
+                        item.label = newTitle;
+                        item.fields = {
+                            Title: newTitle,
+                            Description: newDescription
+                        };
+
+                        workitemsProvider.refresh();
+                        panel.dispose();
+                    }
+                },
+                undefined,
+                context.subscriptions
+            );
         })
     );
 
@@ -231,6 +270,69 @@ function registerAddCommands(context, workitemsProvider) {
             }
         }
         return null;
+    }
+
+    function getEpicWebviewContent(title, description) {
+        return `<!DOCTYPE html>
+        <html lang="en">
+        <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Edit Epic</title>
+            <style>
+                body {
+                    padding: 20px;
+                    font-family: var(--vscode-font-family);
+                    color: var(--vscode-foreground);
+                }
+                label {
+                    display: block;
+                    margin: 12px 0 6px;
+                }
+                input, textarea {
+                    width: 100%;
+                    padding: 8px;
+                    background: var(--vscode-input-background);
+                    color: var(--vscode-input-foreground);
+                    border: 1px solid var(--vscode-input-border);
+                    box-sizing: border-box;
+                }
+                textarea {
+                    min-height: 140px;
+                }
+                button {
+                    margin-top: 12px;
+                    padding: 8px 16px;
+                    background: var(--vscode-button-background);
+                    color: var(--vscode-button-foreground);
+                    border: none;
+                    cursor: pointer;
+                }
+                button:hover {
+                    background: var(--vscode-button-hoverBackground);
+                }
+            </style>
+        </head>
+        <body>
+            <h2>Edit Epic</h2>
+            <label for="title">Title</label>
+            <input id="title" type="text" value="${title.replace(/"/g, '&quot;')}" />
+
+            <label for="description">Description</label>
+            <textarea id="description">${description}</textarea>
+
+            <button id="save">Save</button>
+
+            <script>
+                const vscode = acquireVsCodeApi();
+                document.getElementById('save').addEventListener('click', () => {
+                    const title = document.getElementById('title').value;
+                    const description = document.getElementById('description').value;
+                    vscode.postMessage({ command: 'save', title, description });
+                });
+            </script>
+        </body>
+        </html>`;
     }
 
     context.subscriptions.push(
